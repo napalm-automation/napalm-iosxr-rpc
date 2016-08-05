@@ -31,6 +31,7 @@ from iosxr_eznc.exception import ConnectionClosedError as XRConnectionClosedErro
 from iosxr_eznc.exception import RPCError as XRRPCError
 from iosxr_eznc.exception import RPCTimeoutError as XRRPCTimeoutError
 from iosxr_eznc.exception import GetConfigurationError as XRGetConfigurationError
+from iosxr_eznc.exception import EditConfigError as XREditConfigError
 from iosxr_eznc.exception import LockError as XRLockError
 from iosxr_eznc.exception import UnlockError as XRUnlockError
 from iosxr_eznc.exception import DiscardChangesError as XRDiscardChangesError
@@ -160,3 +161,46 @@ class IOSXRRPCDriver(NetworkDriver):
         if self._config_lock:
             self._unlock()
         self._dev.close()
+
+    def _load_candidate(self, filename, config, replace):
+
+        if filename is not None:
+            config = open(filename).read()
+
+        if not self._config_lock:
+            self._lock()
+
+        operation = None
+        if replace:
+            operation = 'replace'
+
+        try:
+            self._dev.rpc.edit_config(config,
+                                      operation=operation)
+        except XREditConfigError as edit_err:
+            if replace:
+                raise NapalmReplaceConfigException(edit_err.message)
+            else:
+                raise NapalmMergeConfigException(edit_err.message)
+
+    def load_merge_candidate(self, filename, config):
+        return self._load_candidate(filename, config, False)
+
+    def load_replace_candidate(self, filename, config):
+        return self._load_candidate(filename, config, True)
+
+    def compare_config(self):
+        return self._dev.rpc.compare_config()
+
+    def commit_config(self):
+        self._dev.rpc.commit()
+        if not self._config_lock:
+            self._unlock()
+
+    def discard_config(self):
+        self._dev.rpc.discard_config()
+        if not self._config_lock:
+            self._unlock()
+
+    def rollback(self):
+        return
