@@ -1,0 +1,4 @@
+napalm-base
+iosxr-eznc
+# iosxr-grpc
+lxml>=3.2.4
