@@ -1,4 +1,3 @@
 napalm-base
-iosxr-eznc
+iosxr-eznc >= 2016.8.25
 # iosxr-grpc
-lxml>=3.2.4

@@ -18,7 +18,7 @@ NAPALM IOS-XR RPC Driver module.
 """
 
 # python std lib
-import re
+import time
 
 # third party libs
 from lxml import etree
@@ -204,3 +204,41 @@ class IOSXRRPCDriver(NetworkDriver):
 
     def rollback(self):
         return
+
+    def get_facts(self):
+        _dev_facts_keys = [
+            'os_version',
+            'hostname',
+            'fqdn',
+            'model',
+            'os_version',
+            'serial',
+            'uptime'
+        ]
+        _dev_facts = self._dev.facts
+        facts = {
+            f:v for f,v in _dev_facts.iteritems() if f in _dev_facts_keys
+        }
+        facts['serial_number'] = facts.pop('serial', '')
+        facts['uptime'] = convert(int, facts.pop('uptime'))
+        facts['interface_list'] = self.get_interfaces().keys()
+
+        return facts
+
+    def get_interfaces(self):
+        interfaces = {}
+        interfaces_oper = self._dev.rpc.get('Cisco-IOS-XR-pfi-im-cmd-oper:interfaces/interface-xr/interface')
+        interfaces_details = interfaces_oper.get('data').get('interfaces').get('interface-xr').get('interface')
+        for interface in interfaces_details:
+            interface_name = interface.get('interface-name')
+            if interface_name == 'Null0':
+                continue
+            interfaces[interface_name] = {
+                'is_enabled': interface.get('state') == 'im-state-up',
+                'is_up': interface.get('line-state') == 'im-state-up',
+                'mac_address': interface.get('mac-address').get('address'),
+                'description': interface.get('description'),
+                'speed': int(convert(int, interface.get('description'), 0) * 1e-3),
+                'last_flapped': time.time() - convert(float, interface.get('last-state-transition-time'), 0.0)
+            }
+        return interfaces
