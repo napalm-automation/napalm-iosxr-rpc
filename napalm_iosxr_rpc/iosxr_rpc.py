@@ -242,3 +242,63 @@ class IOSXRRPCDriver(NetworkDriver):
                 'last_flapped': time.time() - convert(float, interface.get('last-state-transition-time'), 0.0)
             }
         return interfaces
+
+    def get_interfaces_counters(self):
+        interfaces_counters = {}
+        interfaces_oper = self._dev.rpc.get('Cisco-IOS-XR-pfi-im-cmd-oper:interfaces/interface-xr/interface')
+        interfaces_details = interfaces_oper.get('data').get('interfaces').get('interface-xr').get('interface')
+        for interface in interfaces_details:
+            interface_name = interface.get('interface-name')
+            if interface_name == 'Null0':
+                continue
+            interface_stats = interface.get('interface-statistics').get('full-interface-stats')
+            interfaces_counters[interface_name] = {
+                'tx_multicast_packets': convert(int, interface_stats.get('multicast-packets-sent'), -1),
+                'tx_discards': convert(int, interface_stats.get('output-drops'), -1),
+                'tx_octets': convert(int, interface_stats.get('bytes-sent'), -1),
+                'tx_errors': convert(int, interface_stats.get('output-errors'), -1),
+                'rx_octets': convert(int, interface_stats.get('bytes-received'), -1),
+                'tx_unicast_packets': convert(int, interface_stats.get('packets-sent'), -1),
+                'rx_errors': convert(int, interface_stats.get('input-errors'), -1),
+                'tx_broadcast_packets': convert(int, interface_stats.get('broadcast-packets-sent'), -1),
+                'rx_multicast_packets': convert(int, interface_stats.get('multicast-packets-received'), -1),
+                'rx_broadcast_packets': convert(int, interface_stats.get('broadcast-packets-received'), -1),
+                'rx_discards': convert(int, interface_stats.get('input-drops'), -1),
+                'rx_unicast_packets': convert(int, interface_stats.get('packets-received'), -1)
+            }
+        return interfaces_counters
+
+    def get_environment(self):
+        pass
+
+    def get_bgp_neighbors(self):
+        bgp_neighbors = {}
+        bgp_oper = self._dev.rpc.get('Cisco-IOS-XR-ipv4-bgp-oper:bgp/instances/instance')
+        bgp_instances = bgp_oper.get('data').get('bgp').get('instances').get('instance')
+        if isinstance(bgp_instances, dict):
+            bgp_instances = [bgp_instances]
+        for bgp_instance in bgp_instances:
+            instance_name = bgp_instance.get('instance-name')
+            instance_details = bgp_instance.get('instance-active').get('default-vrf')
+            router_id = instance_details.get('global-process-info').get('vrf').get('router-id')
+            bgp_neighbors[instance_name] = {
+                'router_id': router_id,
+                'peers': {}
+            }
+            instance_neighbors = instance_details.get('neighbors').get('neighbor')
+            if isinstance(bgp_instances, dict):
+                instance_neighbors = [instance_neighbors]
+            for neighbor in instance_neighbors:
+                neighbor_addr = neighbor.get('neighbor-address')
+                neighbor_details = {
+                    'local_as': convert(int, neighbor.get('local-as')),
+                    'remote_as': convert(int, neighbor.get('remote-as')),
+                    'remote_id': neighbor.get('router-id'),
+                    'is_up': neighbor.get('connection-state') == 'bgp-st-established',
+                    'is_enabled': neighbor.get('is-administratively-shut-down') == 'false',
+                    'description': neighbor.get('description'),
+                    'uptime': convert(int, neighbor.get('time-since-connection-last-dropped')),
+                    'address_family': {}
+                }
+                bgp_neighbors[instance_name]['peers'][neighbor_addr] = neighbor_details
+        return bgp_neighbors
